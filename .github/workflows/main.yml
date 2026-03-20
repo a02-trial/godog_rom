@@ -162,7 +162,8 @@ jobs:
         run: |
           echo "Rebuilding system partition..."
           python3 tools/simg2sdat.py rom_extracted/system.img -o rom_extracted/ -p system
-          brotli --best rom_extracted/system.new.dat -o rom_extracted/system.new.dat.br
+          rm -f rom_extracted/system.new.dat.br
+          brotli --best --force rom_extracted/system.new.dat -o rom_extracted/system.new.dat.br
           echo "Done: $(du -sh rom_extracted/system.new.dat.br | cut -f1)"
           rm -f rom_extracted/system.new.dat rom_extracted/system.img
 
@@ -171,7 +172,8 @@ jobs:
           if [ -f "rom_extracted/product.img" ]; then
             echo "Rebuilding product partition..."
             python3 tools/simg2sdat.py rom_extracted/product.img -o rom_extracted/ -p product
-            brotli --best rom_extracted/product.new.dat -o rom_extracted/product.new.dat.br
+            rm -f rom_extracted/product.new.dat.br
+            brotli --best --force rom_extracted/product.new.dat -o rom_extracted/product.new.dat.br
             echo "Done: $(du -sh rom_extracted/product.new.dat.br | cut -f1)"
             rm -f rom_extracted/product.new.dat rom_extracted/product.img
           fi
