@@ -1,0 +1,22 @@
+name: Test e2tools availability
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install and check tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y android-sdk-libsparse-utils e2fsprogs
+          echo "=== Available tools ==="
+          which img2simg || echo "img2simg: not found"
+          which simg2img || echo "simg2img: not found"
+          which make_ext4fs || echo "make_ext4fs: not found"
+          which e2fsdroid || echo "e2fsdroid: not found"
+          which mke2fs || echo "mke2fs: found at $(which mke2fs)"
+          which img2sdat || echo "img2sdat: not found"
+          python3 --version
+          pip list | grep -i img
