@@ -1,0 +1,83 @@
+name: Cleanup Logs, Releases & Tags
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_releases:
+        description: 'Jumlah release terbaru yang mau dipertahankan'
+        required: true
+        default: '0'
+        type: string
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Delete all workflow runs & logs
+        run: |
+          echo "Fetching all workflow runs..."
+          PAGE=1
+          while true; do
+            RUNS=$(gh api repos/${{ github.repository }}/actions/runs \
+              --paginate \
+              -q '.workflow_runs[].id' \
+              --jq '.workflow_runs[].id' 2>/dev/null || \
+              gh api "repos/${{ github.repository }}/actions/runs?per_page=100&page=$PAGE" \
+              -q '.workflow_runs[].id')
+            
+            [ -z "$RUNS" ] && break
+            
+            for RUN_ID in $RUNS; do
+              echo "Deleting run: $RUN_ID"
+              gh api -X DELETE repos/${{ github.repository }}/actions/runs/$RUN_ID || true
+            done
+            
+            PAGE=$((PAGE + 1))
+            [ $(echo "$RUNS" | wc -l) -lt 100 ] && break
+          done
+          echo "All workflow runs deleted!"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete releases & tags
+        run: |
+          KEEP=${{ github.event.inputs.keep_releases }}
+          echo "Keeping latest $KEEP releases..."
+
+          # Get all releases sorted by date (newest first)
+          RELEASES=$(gh api repos/${{ github.repository }}/releases \
+            -q '.[] | "\(.id) \(.tag_name)"' 2>/dev/null)
+
+          if [ -z "$RELEASES" ]; then
+            echo "No releases found."
+          else
+            COUNT=0
+            while IFS= read -r line; do
+              RELEASE_ID=$(echo "$line" | awk '{print $1}')
+              TAG_NAME=$(echo "$line" | awk '{print $2}')
+              COUNT=$((COUNT + 1))
+
+              if [ "$COUNT" -le "$KEEP" ]; then
+                echo "Keeping release: $TAG_NAME"
+                continue
+              fi
+
+              echo "Deleting release: $TAG_NAME (ID: $RELEASE_ID)"
+              gh api -X DELETE repos/${{ github.repository }}/releases/$RELEASE_ID || true
+
+              echo "Deleting tag: $TAG_NAME"
+              git push origin --delete "$TAG_NAME" 2>/dev/null || \
+              gh api -X DELETE repos/${{ github.repository }}/git/refs/tags/$TAG_NAME || true
+
+            done <<< "$RELEASES"
+          fi
+          echo "Done!"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
