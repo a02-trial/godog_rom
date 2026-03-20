@@ -11,14 +11,17 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Download img2sdat tools
+      - name: Download tools
         run: |
-          git clone --depth=1 https://github.com/xpirt/img2sdat /tmp/img2sdat_repo
-          cp /tmp/img2sdat_repo/img2sdat.py tools/
-          cp /tmp/img2sdat_repo/blockimgdiff.py tools/
-          cp /tmp/img2sdat_repo/sparse_img.py tools/
-          cp /tmp/img2sdat_repo/rangelib.py tools/
-          echo "=== Tools downloaded ==="
+          # sdat2img - proven works
+          wget -q https://raw.githubusercontent.com/xpirt/sdat2img/master/sdat2img.py -O tools/sdat2img.py
+          
+          # img2sdat - clone blackeangel fork yang standalone (patch-1 branch)
+          git clone --depth=1 -b patch-1 https://github.com/blackeangel/img2sdat /tmp/img2sdat_repo
+          cp /tmp/img2sdat_repo/*.py tools/
+          
+          chmod +x tools/*.py
+          echo "=== Tools ==="
           ls -lh tools/
 
       - name: Commit tools to repo
@@ -26,7 +29,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add tools/
-          git commit -m "Update img2sdat tools from xpirt/img2sdat" || echo "Nothing to commit"
+          git commit -m "Update tools - blackeangel img2sdat standalone" || echo "Nothing to commit"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
