@@ -69,14 +69,15 @@ jobs:
           sudo mount -o loop,ro rom_extracted/system.img mnt_system/
 
           echo "=== build.prop locations in system ==="
-          find mnt_system/ -name "build.prop" | tee system_buildprops.txt
+          sudo find mnt_system/ -name "build.prop" 2>/dev/null | sort -u | tee system_buildprops.txt
           cat system_buildprops.txt
 
           mkdir -p patched_system
           while IFS= read -r filepath; do
             relpath="${filepath#mnt_system/}"
             mkdir -p "patched_system/$(dirname "$relpath")"
-            cp "$filepath" "patched_system/$relpath"
+            sudo cp "$filepath" "patched_system/$relpath"
+            sudo chmod 644 "patched_system/$relpath"
             echo "Patching: $relpath"
             sed -i \
               -e 's/Xiaomi/samsung/g' \
@@ -98,14 +99,15 @@ jobs:
             sudo mount -o loop,ro rom_extracted/product.img mnt_product/
 
             echo "=== build.prop locations in product ==="
-            find mnt_product/ -name "build.prop" | tee product_buildprops.txt
+            sudo find mnt_product/ -name "build.prop" 2>/dev/null | sort -u | tee product_buildprops.txt
             cat product_buildprops.txt
 
             mkdir -p patched_product
             while IFS= read -r filepath; do
               relpath="${filepath#mnt_product/}"
               mkdir -p "patched_product/$(dirname "$relpath")"
-              cp "$filepath" "patched_product/$relpath"
+              sudo cp "$filepath" "patched_product/$relpath"
+              sudo chmod 644 "patched_product/$relpath"
               echo "Patching: $relpath"
               sed -i \
                 -e 's/Xiaomi/samsung/g' \
