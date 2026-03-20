@@ -1,0 +1,82 @@
+name: DSU
+
+on:
+  workflow_dispatch:
+    inputs:
+      gdrive_id:
+        description: 'Google Drive File ID ROM zip'
+        required: true
+        default: '1uA0ILCTm019L7BwozvGz-oyugZVPuVHl'
+        type: string
+      release_tag:
+        description: 'Tag untuk GH Release (contoh: v1.0-a02-dsu)'
+        required: true
+        default: 'v1.0-a02-dsu'
+        type: string
+
+jobs:
+  extract-img:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y brotli python3 python3-pip android-sdk-libsparse-utils
+          pip install -q gdown
+          chmod +x tools/sdat2img.py
+
+      - name: Download ROM from Google Drive
+        run: |
+          echo "Downloading ROM..."
+          gdown --id "${{ github.event.inputs.gdrive_id }}" -O rom_orig.zip
+          echo "Size: $(du -sh rom_orig.zip | cut -f1)"
+
+      - name: Extract ROM zip
+        run: |
+          mkdir -p rom_extracted
+          unzip -q rom_orig.zip -d rom_extracted/
+          ls -lh rom_extracted/
+
+      - name: Convert system.img
+        run: |
+          echo "Converting system partition..."
+          brotli --decompress rom_extracted/system.new.dat.br -o rom_extracted/system.new.dat
+          python3 tools/sdat2img.py rom_extracted/system.transfer.list rom_extracted/system.new.dat system.img
+          echo "system.img: $(du -sh system.img | cut -f1)"
+
+      - name: Convert product.img
+        run: |
+          echo "Converting product partition..."
+          if [ -f "rom_extracted/product.new.dat.br" ]; then
+            brotli --decompress rom_extracted/product.new.dat.br -o rom_extracted/product.new.dat
+            python3 tools/sdat2img.py rom_extracted/product.transfer.list rom_extracted/product.new.dat product.img
+            echo "product.img: $(du -sh product.img | cut -f1)"
+          else
+            echo "product.new.dat.br not found, skipping..."
+          fi
+
+      - name: Cleanup
+        run: rm -rf rom_orig.zip rom_extracted/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          name: "DSU Images - ${{ github.event.inputs.release_tag }}"
+          body: |
+            ## DSU Sideloader Images - SM-A022F
+            ### Cara pakai
+            1. Download `system.img` dan `product.img`
+            2. Load via DSU Sideloader
+            ### Files
+            - `system.img` → system partition
+            - `product.img` → product partition
+          files: |
+            system.img
+            product.img
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
