@@ -25,7 +25,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y brotli python3 python3-pip img2simg
+          sudo apt-get install -y brotli python3 python3-pip android-sdk-libsparse-utils
           pip install -q gdown
 
       - name: Download tools
