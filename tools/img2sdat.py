@@ -1,103 +1,99 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""
-@ File Name    :   img2sdat.py
-@ Author       :   Abdalrohman Alnasier
-@ Created Time :   2022/11/10 19:09:36
+#====================================================
+#          FILE: img2sdat.py
+#       AUTHORS: xpirt - luxi78 - howellzhu
+#          DATE: 2018-05-25 12:19:12 CEST
+#====================================================
 
-OEM_ROM_Editor
-Copyright (C) 2022 Abdalrohman Alnasier
+from __future__ import print_function
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+import sys, os, errno, tempfile
+import common, blockimgdiff, sparse_img
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU General Public License for more details.
+def main(INPUT_IMAGE, OUTDIR='.', VERSION=None, PREFIX='system'):
+    global input
 
-You should have received a copy of the GNU General Public License
-along with this program. If not, see <http://www.gnu.org/licenses/>.
-"""
+    __version__ = '1.7'
 
-import argparse
-import os
-import tempfile
-import time
+    if sys.hexversion < 0x02070000:
+        print >> sys.stderr, "Python 2.7 or newer is required."
+        try:
+            input = raw_input
+        except NameError: pass
+        input('Press ENTER to exit...')
+        sys.exit(1)
+    else:
+        print('img2sdat binary - version: %s\n' % __version__)
+        
+    if not os.path.isdir(OUTDIR):
+        os.makedirs(OUTDIR)
 
-# Import necessary modules
-import common, images, sparse_img
+    OUTDIR = OUTDIR + '/'+ PREFIX
 
+    if not VERSION:
+        VERSION = 4
+        while True:
+            print('''            1. Android Lollipop 5.0
+            2. Android Lollipop 5.1
+            3. Android Marshmallow 6.0
+            4. Android Nougat 7.0/7.1/8.0/8.1
+            ''')
+            try:
+                input = raw_input
+            except NameError: pass
+            item = input('Choose system version: ')
+            if item == '1':
+                VERSION = 1
+                break
+            elif item == '2':
+                VERSION = 2
+                break
+            elif item == '3':
+                VERSION = 3
+                break
+            elif item == '4':
+                VERSION = 4
+                break
+            else:
+                return
 
-def img2sdat(input_image, prefix, cache_size, out_dir, version):
-    """
-    Convert image to new.dat format.
+    # Get sparse image
+    image = sparse_img.SparseImage(INPUT_IMAGE, tempfile.mkstemp()[1], '0')
 
-    Args:
-        input_image (str): Path to the input system image.
-        prefix (str): Name of the image.
-        cache_size (int): Cache size.
-        out_dir (str): Output directory.
-        version (int): Transfer list version number.
+    # Generate output files
+    b = blockimgdiff.BlockImageDiff(image, None, VERSION)
+    b.Compute(OUTDIR)
 
-    Returns:
-        None
-    """
+    print('Done! Output files: %s' % os.path.dirname(OUTDIR))
+    return
 
-    start_time = time.time()
+if __name__ == '__main__':
+    import argparse
 
-    # Create output directory if it doesn't exist
-    os.makedirs(out_dir, exist_ok=True)
-
-    # Construct output path
-    path = os.path.join(out_dir, prefix)
-
-    # Create SparseImage object
-    image = sparse_img.SparseImage(input_image, tempfile.mkstemp()[1], "0")
-
-    # Set cache size
-    common.OPTIONS.cache_size = cache_size
-
-    # Create EmptyImage object
-    src = images.EmptyImage()
-
-    # Compute block image diff
-    block_image_diff = common.BiD(image, src, version)
-    block_image_diff.Compute(path)
-
-    end_time = time.time()
-    execution_time = end_time - start_time
-    print(f"Execution time: {execution_time} seconds")
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-
-    # Define command-line arguments
-    parser.add_argument("image", help="input system image")
-
-    parser.add_argument("-c", "--cachesize", type=int, default=402653184, help="cache size")
-
-    parser.add_argument(
-        "-o",
-        "--outdir",
-        default=".",
-        help="output directory (current directory by default)",
-    )
-
-    parser.add_argument(
-        "-v",
-        "--version",
-        default=4,
-        type=int,
-        help="transfer list version number (3,4 default=4)",
-    )
-
-    parser.add_argument("-p", "--prefix", default="system", help="name of image (prefix.new.dat)")
+    parser = argparse.ArgumentParser(description='Visit xda thread for more information.')
+    parser.add_argument('image', help='input system image')
+    parser.add_argument('-o', '--outdir', help='output directory (current directory by default)')
+    parser.add_argument('-v', '--version', help='transfer list version number, will be asked by default - more info on xda thread)')
+    parser.add_argument('-p', '--prefix', help='name of image (prefix.new.dat)')
 
     args = parser.parse_args()
 
-    # Call main function with command-line arguments
-    img2sdat(args.image, args.prefix, args.cachesize, args.outdir, args.version)
+    INPUT_IMAGE = args.image
+    
+    if args.outdir:
+        OUTDIR = args.outdir
+    else:
+        OUTDIR = '.'
+
+    if args.version:
+        VERSION = int(args.version)
+    else:
+        VERSION = None
+    
+    if args.prefix:
+        PREFIX = args.prefix
+    else:
+        PREFIX = 'system'
+    
+    main(INPUT_IMAGE, OUTDIR, VERSION, PREFIX)
