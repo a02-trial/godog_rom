@@ -1,0 +1,32 @@
+name: Setup Tools
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-tools:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Download img2sdat tools
+        run: |
+          git clone --depth=1 https://github.com/xpirt/img2sdat /tmp/img2sdat_repo
+          cp /tmp/img2sdat_repo/img2sdat.py tools/
+          cp /tmp/img2sdat_repo/blockimgdiff.py tools/
+          cp /tmp/img2sdat_repo/sparse_img.py tools/
+          cp /tmp/img2sdat_repo/rangelib.py tools/
+          echo "=== Tools downloaded ==="
+          ls -lh tools/
+
+      - name: Commit tools to repo
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add tools/
+          git commit -m "Update img2sdat tools from xpirt/img2sdat" || echo "Nothing to commit"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
