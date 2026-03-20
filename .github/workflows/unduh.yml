@@ -1,0 +1,79 @@
+name: Extract ROM Images
+
+on:
+  workflow_dispatch:
+    inputs:
+      gdrive_id:
+        description: 'Google Drive File ID'
+        required: true
+        default: '1uA0ILCTm019L7BwozvGz-oyugZVPuVHl'
+        type: string
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y brotli python3 python3-pip
+          pip install -q gdown
+
+      - name: Download sdat2img
+        run: |
+          wget -q https://raw.githubusercontent.com/xpirt/sdat2img/master/sdat2img.py
+          chmod +x sdat2img.py
+
+      - name: Download ROM from Google Drive
+        run: |
+          echo "Downloading ROM from Google Drive..."
+          gdown --id "${{ github.event.inputs.gdrive_id }}" -O custom_rom.zip
+          echo "Download complete: $(du -sh custom_rom.zip | cut -f1)"
+
+      - name: Extract ROM zip
+        run: |
+          echo "Extracting ROM zip..."
+          unzip -q custom_rom.zip \
+            "system.new.dat.br" \
+            "system.transfer.list" \
+            "product.new.dat.br" \
+            "product.transfer.list" \
+            2>/dev/null || true
+          ls -lh *.dat.br *.list 2>/dev/null
+
+      - name: Convert system image
+        run: |
+          echo "Processing system partition..."
+          brotli --decompress system.new.dat.br -o system.new.dat
+          python3 sdat2img.py system.transfer.list system.new.dat system.img
+          echo "system.img size: $(du -sh system.img | cut -f1)"
+          rm -f system.new.dat.br system.new.dat system.transfer.list
+
+      - name: Convert product image
+        run: |
+          echo "Processing product partition..."
+          if [ -f "product.new.dat.br" ]; then
+            brotli --decompress product.new.dat.br -o product.new.dat
+            python3 sdat2img.py product.transfer.list product.new.dat product.img
+            echo "product.img size: $(du -sh product.img | cut -f1)"
+            rm -f product.new.dat.br product.new.dat product.transfer.list
+          else
+            echo "product.new.dat.br not found, skipping..."
+          fi
+
+      - name: Cleanup
+        run: rm -f custom_rom.zip
+
+      - name: Upload images as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rom-images
+          path: |
+            system.img
+            product.img
+          retention-days: 1
+          compression-level: 0
