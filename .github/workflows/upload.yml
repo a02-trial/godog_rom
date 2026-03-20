@@ -29,6 +29,8 @@ jobs:
 
       - name: Check ROM file exists
         run: |
+          cd ${GITHUB_WORKSPACE}
+          ls
           if [ ! -f "${{ github.event.inputs.rom_filename }}" ]; then
             echo "ERROR: File '${{ github.event.inputs.rom_filename }}' not found in repo root!"
             exit 1
