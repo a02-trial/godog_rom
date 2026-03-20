@@ -62,6 +62,13 @@ jobs:
       - name: Cleanup
         run: rm -rf rom_orig.zip rom_extracted/
 
+      - name: Pack into zip
+        run: |
+          zip -6 dsu_images.zip system.img product.img 2>/dev/null || \
+          zip -6 dsu_images.zip system.img
+          echo "dsu_images.zip: $(du -sh dsu_images.zip | cut -f1)"
+          rm -f system.img product.img
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -70,13 +77,11 @@ jobs:
           body: |
             ## DSU Sideloader Images - SM-A022F
             ### Cara pakai
-            1. Download `system.img` dan `product.img`
-            2. Load via DSU Sideloader
+            1. Download `dsu_images.zip`
+            2. Extract → load `system.img` + `product.img` via DSU Sideloader
             ### Files
             - `system.img` → system partition
             - `product.img` → product partition
-          files: |
-            system.img
-            product.img
+          files: dsu_images.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
