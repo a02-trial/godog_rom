@@ -1,99 +1,157 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-#====================================================
+# ====================================================
 #          FILE: img2sdat.py
 #       AUTHORS: xpirt - luxi78 - howellzhu
-#          DATE: 2018-05-25 12:19:12 CEST
-#====================================================
+#          DATE: 2018-01-05 15:21:47 CEST
+#       Moded by blackeangel 4pda.ru on 1.6 version
+# ====================================================
 
 from __future__ import print_function
 
 import sys, os, errno, tempfile
 import common, blockimgdiff, sparse_img
 
-def main(INPUT_IMAGE, OUTDIR='.', VERSION=None, PREFIX='system'):
+__version__ = '1.6'
+
+if sys.hexversion < 0x02070000:
+    print >> sys.stderr, "Python 2.7 or newer is required."
+    try:
+       input = raw_input
+    except NameError: pass
+    input('Press ENTER to exit...')
+    sys.exit(1)
+else:
+    print('img2sdat binary - version: %s\n' % __version__)
+
+try:
+    INPUT_IMAGE = str(sys.argv[1])
+except IndexError:
+    print('Usage: img2sdat.py <system_img> [outdir] [version]\n')
+    print('    <system_img>: input system image\n')
+    print('    [outdir]: output directory (current directory by default)\n')
+    print('    [version]: transfer list version number, will be asked by default - more info on xda thread)\n')
+    print('Visit xda thread for more information.\n')
+    try:
+       input = raw_input
+    except NameError: pass
+    input('Press ENTER to exit...')
+    sys.exit()
+
+def __AndroidVersion():
     global input
-
-    __version__ = '1.7'
-
-    if sys.hexversion < 0x02070000:
-        print >> sys.stderr, "Python 2.7 or newer is required."
+    item = True
+    while item:
+        print('''1. Android Lollipop 5.0
+2. Android Lollipop 5.1
+3. Android Marshmallow 6.0
+4. Android Nougat 7.0 and above (8.0, 8.1 etc)
+''')
         try:
             input = raw_input
-        except NameError: pass
-        input('Press ENTER to exit...')
-        sys.exit(1)
-    else:
-        print('img2sdat binary - version: %s\n' % __version__)
-        
-    if not os.path.isdir(OUTDIR):
-        os.makedirs(OUTDIR)
+        except NameError:
+            pass
+        item = input('Choose system version: ')
+        if item == '1':
+            version = 1
+            break
+        elif item == '2':
+            version = 2
+            break
+        elif item == '3':
+            version = 3
+            break
+        elif item == '4':
+            version = 4
+            break
+        else:
+            return
+    return version
 
-    OUTDIR = OUTDIR + '/'+ PREFIX
+def __FindStringInByteFile(word,file):
+    findword =  bytes(word, 'utf-8')
+    with open(file, "r+b") as f:
+        for line in f:
+            if findword in line:
+                rez=line.__str__()[2:len(line.__str__())-3] #получаем строку без b' вначале и \n' в конце строки
+                return rez.split("=")[1] #для текущей задачи сплит
 
-    if not VERSION:
-        VERSION = 4
-        while True:
-            print('''            1. Android Lollipop 5.0
-            2. Android Lollipop 5.1
-            3. Android Marshmallow 6.0
-            4. Android Nougat 7.0/7.1/8.0/8.1
-            ''')
-            try:
-                input = raw_input
-            except NameError: pass
-            item = input('Choose system version: ')
-            if item == '1':
-                VERSION = 1
-                break
-            elif item == '2':
-                VERSION = 2
-                break
-            elif item == '3':
-                VERSION = 3
-                break
-            elif item == '4':
-                VERSION = 4
-                break
+def __convertApi2ver(versionApi):
+    if versionApi == "None":
+        ver = 0
+    elif versionApi == "21":
+        ver=1
+    elif versionApi =="22":
+        ver=2
+    elif versionApi =="23":
+        ver=3
+    elif int(versionApi) >= 24:
+    #elif versionApi =="24" or versionApi =="25" or versionApi =="26" or versionApi =="27":
+        ver=4
+    return ver
+
+def main(argv):
+    global input
+    if len(sys.argv) > 2 and len(sys.argv) < 4:
+        if sys.argv[len(sys.argv)-1].isdigit():
+            if int(sys.argv[len(sys.argv)-1]) < 5:
+                version = int(sys.argv[len(sys.argv)-1])
+                outdir = os.path.realpath(os.path.dirname(sys.argv[1])) + os.sep + os.path.basename(sys.argv[1]).split('.')[0]
             else:
-                return
+                outdir = sys.argv[len(sys.argv)-1] + os.sep + os.path.basename(sys.argv[1]).split('.')[0]
+                if not os.path.exists(sys.argv[len(sys.argv)-1]):
+                    os.makedirs(sys.argv[len(sys.argv)-1])
+                versionsdk = __FindStringInByteFile("ro.build.version.sdk=", sys.argv[1]).__str__()
+                print('Detected version sdk %s' % versionsdk)
+                version = __convertApi2ver(versionsdk)
+                if version == 0:
+                    version = __AndroidVersion()
+        else:
+            outdir = sys.argv[len(sys.argv) - 1] + os.sep + os.path.basename(sys.argv[1]).split('.')[0]
+            if not os.path.exists(os.path.dirname(sys.argv[len(sys.argv) - 1])):
+                os.makedirs(sys.argv[len(sys.argv) - 1])
+            versionsdk = __FindStringInByteFile("ro.build.version.sdk=", sys.argv[1]).__str__()
+            print('Detected version sdk %s' % versionsdk)
+            version = __convertApi2ver(versionsdk)
+            if version == 0:
+                version = __AndroidVersion()
+    else:
+        if len(sys.argv) == 2:
+            if sys.argv[len(sys.argv) - 1].isdigit():
+                if int(sys.argv[len(sys.argv) - 1]) < 5:
+                    version = int(sys.argv[len(sys.argv)-1])
+                    outdir = os.path.realpath(os.path.dirname(sys.argv[1])) + os.sep + os.path.basename(sys.argv[1]).split('.')[0]
+            else:
+                    outdir = os.path.realpath(os.path.dirname(sys.argv[1])) + os.sep + os.path.basename(sys.argv[1]).split('.')[0]
+                    versionsdk = __FindStringInByteFile("ro.build.version.sdk=", sys.argv[1]).__str__()
+                    print('Detected version sdk %s' % versionsdk)
+                    version = __convertApi2ver(versionsdk)
+                    if version == 0:
+                        version = __AndroidVersion()
+        else:
+                if int(sys.argv[len(sys.argv) - 1]) < 5:
+                    version = int(sys.argv[len(sys.argv) - 1])
+                else:
+                    versionsdk = __FindStringInByteFile("ro.build.version.sdk=", sys.argv[1]).__str__()
+                    print('Detected version sdk %s' % versionsdk)
+                    version = __convertApi2ver(versionsdk)
+                    if version == 0:
+                        version = __AndroidVersion()
+                outdir = sys.argv[2] + os.sep + os.path.basename(sys.argv[1]).split('.')[0]
+                if not os.path.exists(sys.argv[2]):
+                    os.makedirs(sys.argv[2])
+
 
     # Get sparse image
     image = sparse_img.SparseImage(INPUT_IMAGE, tempfile.mkstemp()[1], '0')
 
     # Generate output files
-    b = blockimgdiff.BlockImageDiff(image, None, VERSION)
-    b.Compute(OUTDIR)
+    b = blockimgdiff.BlockImageDiff(image, None, version)
+    b.Compute(outdir)
 
-    print('Done! Output files: %s' % os.path.dirname(OUTDIR))
+    print('Done! Output files: %s' % os.path.dirname(outdir))
     return
 
+
 if __name__ == '__main__':
-    import argparse
-
-    parser = argparse.ArgumentParser(description='Visit xda thread for more information.')
-    parser.add_argument('image', help='input system image')
-    parser.add_argument('-o', '--outdir', help='output directory (current directory by default)')
-    parser.add_argument('-v', '--version', help='transfer list version number, will be asked by default - more info on xda thread)')
-    parser.add_argument('-p', '--prefix', help='name of image (prefix.new.dat)')
-
-    args = parser.parse_args()
-
-    INPUT_IMAGE = args.image
-    
-    if args.outdir:
-        OUTDIR = args.outdir
-    else:
-        OUTDIR = '.'
-
-    if args.version:
-        VERSION = int(args.version)
-    else:
-        VERSION = None
-    
-    if args.prefix:
-        PREFIX = args.prefix
-    else:
-        PREFIX = 'system'
-    
-    main(INPUT_IMAGE, OUTDIR, VERSION, PREFIX)
+    main(sys.argv)
