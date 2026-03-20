@@ -27,17 +27,7 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y brotli python3 python3-pip android-sdk-libsparse-utils
           pip install -q gdown
-
-      - name: Download tools
-        run: |
-          # sdat2img
-          git clone --depth=1 https://github.com/xpirt/sdat2img
-          cp sdat2img/sdat2img.py .
-          # img2sdat
-          git clone --depth=1 https://github.com/jazlavro/img2sdat || \
-          git clone --depth=1 https://github.com/vastblast/img2sdat
-          cp img2sdat/img2sdat.py .
-          chmod +x sdat2img.py img2sdat.py
+          chmod +x tools/sdat2img.py tools/img2sdat.py
 
       - name: Download ROM from Google Drive
         run: |
@@ -56,7 +46,7 @@ jobs:
         run: |
           echo "Converting system partition..."
           brotli --decompress rom_extracted/system.new.dat.br -o rom_extracted/system.new.dat
-          python3 sdat2img.py rom_extracted/system.transfer.list rom_extracted/system.new.dat rom_extracted/system.img
+          python3 tools/sdat2img.py rom_extracted/system.transfer.list rom_extracted/system.new.dat rom_extracted/system.img
           echo "system.img: $(du -sh rom_extracted/system.img | cut -f1)"
           rm -f rom_extracted/system.new.dat
 
@@ -65,7 +55,7 @@ jobs:
           echo "Converting product partition..."
           if [ -f "rom_extracted/product.new.dat.br" ]; then
             brotli --decompress rom_extracted/product.new.dat.br -o rom_extracted/product.new.dat
-            python3 sdat2img.py rom_extracted/product.transfer.list rom_extracted/product.new.dat rom_extracted/product.img
+            python3 tools/sdat2img.py rom_extracted/product.transfer.list rom_extracted/product.new.dat rom_extracted/product.img
             echo "product.img: $(du -sh rom_extracted/product.img | cut -f1)"
             rm -f rom_extracted/product.new.dat
           else
@@ -82,7 +72,6 @@ jobs:
           find mnt_system/ -name "build.prop" | tee system_buildprops.txt
           cat system_buildprops.txt
 
-          # Copy ke temp dir
           mkdir -p patched_system
           while IFS= read -r filepath; do
             relpath="${filepath#mnt_system/}"
@@ -170,7 +159,7 @@ jobs:
       - name: Rebuild system.new.dat.br
         run: |
           echo "Rebuilding system partition..."
-          python3 img2sdat.py rom_extracted/system.img -o rom_extracted/ -v 4
+          python3 tools/img2sdat.py rom_extracted/system.img -o rom_extracted/ -v 4
           brotli --best rom_extracted/system.new.dat -o rom_extracted/system.new.dat.br
           echo "Done: $(du -sh rom_extracted/system.new.dat.br | cut -f1)"
           rm -f rom_extracted/system.new.dat rom_extracted/system.img
@@ -179,7 +168,7 @@ jobs:
         run: |
           if [ -f "rom_extracted/product.img" ]; then
             echo "Rebuilding product partition..."
-            python3 img2sdat.py rom_extracted/product.img -o rom_extracted/ -v 4
+            python3 tools/img2sdat.py rom_extracted/product.img -o rom_extracted/ -v 4
             brotli --best rom_extracted/product.new.dat -o rom_extracted/product.new.dat.br
             echo "Done: $(du -sh rom_extracted/product.new.dat.br | cut -f1)"
             rm -f rom_extracted/product.new.dat rom_extracted/product.img
@@ -200,7 +189,7 @@ jobs:
           tag_name: ${{ github.event.inputs.release_tag }}
           name: "Patched ROM - ${{ github.event.inputs.release_tag }}"
           body: |
-            ## Patched ROM for SM-A022F (SM-A022F)
+            ## Patched ROM for SM-A022F
             ### Perubahan build.prop
             - Xiaomi/Redmi → samsung
             - blossom/garden → a02
