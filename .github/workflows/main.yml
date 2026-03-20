@@ -1,0 +1,218 @@
+name: Patch ROM build.prop
+
+on:
+  workflow_dispatch:
+    inputs:
+      gdrive_id:
+        description: 'Google Drive File ID ROM zip'
+        required: true
+        default: '1uA0ILCTm019L7BwozvGz-oyugZVPuVHl'
+        type: string
+      release_tag:
+        description: 'Tag untuk GH Release (contoh: v1.0-a02)'
+        required: true
+        default: 'v1.0-a02'
+        type: string
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y brotli python3 python3-pip img2simg
+          pip install -q gdown
+
+      - name: Download tools
+        run: |
+          # sdat2img
+          wget -q https://raw.githubusercontent.com/xpirt/sdat2img/master/sdat2img.py
+          # img2sdat
+          wget -q https://raw.githubusercontent.com/jazlavro/img2sdat/master/img2sdat.py
+          chmod +x sdat2img.py img2sdat.py
+
+      - name: Download ROM from Google Drive
+        run: |
+          echo "Downloading ROM..."
+          gdown --id "${{ github.event.inputs.gdrive_id }}" -O rom_orig.zip
+          echo "Size: $(du -sh rom_orig.zip | cut -f1)"
+
+      - name: Extract ROM zip
+        run: |
+          echo "Extracting ROM zip..."
+          mkdir -p rom_extracted
+          unzip -q rom_orig.zip -d rom_extracted/
+          ls -lh rom_extracted/
+
+      - name: Convert system.img
+        run: |
+          echo "Converting system partition..."
+          cd rom_extracted
+          brotli --decompress system.new.dat.br -o system.new.dat
+          python3 ../sdat2img.py system.transfer.list system.new.dat system.img
+          echo "system.img: $(du -sh system.img | cut -f1)"
+
+      - name: Convert product.img
+        run: |
+          echo "Converting product partition..."
+          cd rom_extracted
+          if [ -f "product.new.dat.br" ]; then
+            brotli --decompress product.new.dat.br -o product.new.dat
+            python3 ../sdat2img.py product.transfer.list product.new.dat product.img
+            echo "product.img: $(du -sh product.img | cut -f1)"
+          else
+            echo "product.new.dat.br not found, skipping..."
+          fi
+
+      - name: Patch build.prop files
+        run: |
+          echo "Mounting and patching build.prop..."
+          mkdir -p mnt_system mnt_product
+
+          # Mount system
+          sudo mount -o loop,ro rom_extracted/system.img mnt_system/
+          
+          # Cari semua build.prop di system
+          echo "=== build.prop locations in system ==="
+          find mnt_system/ -name "build.prop" | tee system_buildprops.txt
+          
+          # Copy build.prop yang ditemukan
+          mkdir -p patched/system
+          while IFS= read -r filepath; do
+            relpath="${filepath#mnt_system/}"
+            destdir="patched/system/$(dirname "$relpath")"
+            mkdir -p "$destdir"
+            cp "$filepath" "patched/system/$relpath"
+            echo "Patching: $relpath"
+            sed -i \
+              -e 's/Xiaomi/samsung/g' \
+              -e 's/Redmi/samsung/g' \
+              -e 's/blossom/a02/g' \
+              -e 's/garden/a02/g' \
+              -e 's/thiago/rdbckp/g' \
+              -e 's/chizz//g' \
+              "patched/system/$relpath"
+          done < system_buildprops.txt
+          
+          sudo umount mnt_system/
+
+          # Mount product
+          if [ -f "rom_extracted/product.img" ]; then
+            sudo mount -o loop,ro rom_extracted/product.img mnt_product/
+            
+            echo "=== build.prop locations in product ==="
+            find mnt_product/ -name "build.prop" | tee product_buildprops.txt
+            
+            mkdir -p patched/product
+            while IFS= read -r filepath; do
+              relpath="${filepath#mnt_product/}"
+              destdir="patched/product/$(dirname "$relpath")"
+              mkdir -p "$destdir"
+              cp "$filepath" "patched/product/$relpath"
+              echo "Patching: $relpath"
+              sed -i \
+                -e 's/Xiaomi/samsung/g' \
+                -e 's/Redmi/samsung/g' \
+                -e 's/blossom/a02/g' \
+                -e 's/garden/a02/g' \
+                -e 's/thiago/rdbckp/g' \
+                -e 's/chizz//g' \
+                "patched/product/$relpath"
+            done < product_buildprops.txt
+            
+            sudo umount mnt_product/
+          fi
+          
+          echo "=== Patched files ==="
+          find patched/ -name "build.prop"
+
+      - name: Rebuild system partition
+        run: |
+          echo "Rebuilding system partition..."
+          cd rom_extracted
+
+          # Mount system RW untuk patch
+          mkdir -p mnt_rw
+          sudo mount -o loop rom_extracted/system.img mnt_rw/ 2>/dev/null || \
+          sudo mount -o loop,rw rom_extracted/system.img mnt_rw/
+
+          # Copy patched build.prop back
+          while IFS= read -r filepath; do
+            relpath="${filepath#mnt_system/}"
+            src="../patched/system/$relpath"
+            dst="mnt_rw/$relpath"
+            if [ -f "$src" ]; then
+              sudo cp "$src" "$dst"
+              echo "Applied: $dst"
+            fi
+          done < ../system_buildprops.txt
+
+          sudo umount mnt_rw/
+
+          # Convert back to dat
+          python3 ../img2sdat.py rom_extracted/system.img -o rom_extracted/ -v 4
+          brotli --best rom_extracted/system.new.dat -o rom_extracted/system.new.dat.br
+          echo "system.new.dat.br rebuilt: $(du -sh rom_extracted/system.new.dat.br | cut -f1)"
+          rm -f rom_extracted/system.new.dat rom_extracted/system.img
+
+      - name: Rebuild product partition
+        run: |
+          if [ -f "rom_extracted/product.img" ]; then
+            echo "Rebuilding product partition..."
+
+            mkdir -p mnt_rw_product
+            sudo mount -o loop,rw rom_extracted/product.img mnt_rw_product/
+
+            while IFS= read -r filepath; do
+              relpath="${filepath#mnt_product/}"
+              src="patched/product/$relpath"
+              dst="mnt_rw_product/$relpath"
+              if [ -f "$src" ]; then
+                sudo cp "$src" "$dst"
+                echo "Applied: $dst"
+              fi
+            done < product_buildprops.txt
+
+            sudo umount mnt_rw_product/
+
+            python3 img2sdat.py rom_extracted/product.img -o rom_extracted/ -v 4
+            brotli --best rom_extracted/product.new.dat -o rom_extracted/product.new.dat.br
+            echo "product.new.dat.br rebuilt: $(du -sh rom_extracted/product.new.dat.br | cut -f1)"
+            rm -f rom_extracted/product.new.dat rom_extracted/product.img
+          fi
+
+      - name: Repack ROM zip
+        run: |
+          echo "Repacking ROM zip..."
+          cd rom_extracted
+          # Hapus file lama yg udah diganti
+          rm -f system.new.dat product.new.dat
+          # Zip semua
+          zip -r ../rom_patched.zip .
+          cd ..
+          echo "Final size: $(du -sh rom_patched.zip | cut -f1)"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          name: "Patched ROM - ${{ github.event.inputs.release_tag }}"
+          body: |
+            ## Patched ROM for SM-A022F
+            
+            ### Changes
+            - Xiaomi/Redmi → samsung
+            - blossom/garden → a02
+            - thiago → rdbckp
+            - chizz removed
+            
+            ### Files
+            - `rom_patched.zip` → ROM siap susun
+          files: rom_patched.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
